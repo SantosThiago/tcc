@@ -214,7 +214,6 @@ class Graph(object):
     #Heurística de varredura, utiliza o ângulo para a cluterziração dos nós
     def sweep(self):
         current_Cluster=1 #identificação dos clusters
-        total_Vehicles=self.num_Vehicles #total de veículos para controle de não ultrapassar o número disponíveis
         current_Capacity=self.capacity #capacidade atual para controle da capacidade de cada veículo
         x_Dep = self.node_List[0].get_Pos()[0] #posição x do depósito
         y_Dep = self.node_List[0].get_Pos()[1] #posição y do depósito
