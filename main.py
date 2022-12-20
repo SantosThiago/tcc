@@ -65,23 +65,6 @@ class Graph(object):
         plt.savefig(fileName)
         plt.close()
 
-    def sorted_byTime(self,graph):
-        for i in graph.keys():
-            by_Time = []
-            for j in range(len(graph[i])):
-                node=graph[i][j]
-                by_Time.append([self.node_List[node].get_end_Time(),graph[i][j]])
-
-            by_Time=sorted(by_Time)
-            aux=[]
-
-            for list in by_Time:
-                aux.append(list[1])
-
-            graph[i]=aux
-
-        return graph
-
     def salesman(self,graph):
         current_Vehicle = 1
         current_Capacity = self.capacity
@@ -167,19 +150,6 @@ class Graph(object):
 
                     cluster_Visits.append(minor[1])
 
-                    if current_Capacity >= self.node_List[minor[1]].get_Demand():
-                        current_Capacity -= self.node_List[minor[1]].get_Demand()
-
-                    else:
-                        total_Vehicles -= 1
-                        if total_Vehicles != 0:
-                            current_Capacity = self.capacity
-                            current_Vehicle += 1
-
-                        else:
-                            print("No more vehicles avaible")
-                            break
-
                     finish += 1
                     current_Node = minor[1]
 
@@ -192,19 +162,6 @@ class Graph(object):
                 if graph[i][0] not in cluster_Visits:
                     cluster_Visits.append(graph[i][0])
 
-                    if current_Capacity >= self.node_List[graph[i][0]].get_Demand():
-                        current_Capacity -= self.node_List[graph[i][0]].get_Demand()
-
-                    else:
-                        total_Vehicles -= 1
-                        if total_Vehicles != 0:
-                            current_Capacity = self.capacity
-                            current_Vehicle += 1
-
-                        else:
-                            print("No more vehicles avaible")
-                            break
-
             cluster_Visits.append(0)
             graph[i] = cluster_Visits
             l += 1
@@ -215,6 +172,7 @@ class Graph(object):
     def sweep(self):
         current_Cluster=1 #identificação dos clusters
         current_Capacity=self.capacity #capacidade atual para controle da capacidade de cada veículo
+
         x_Dep = self.node_List[0].get_Pos()[0] #posição x do depósito
         y_Dep = self.node_List[0].get_Pos()[1] #posição y do depósito
         polar_Angles=[] # lista dos ângulos
@@ -261,12 +219,59 @@ class Graph(object):
                                #ele recebe o nó que não pode ser inserido no cluster anterior
 
         dict_clusters[current_Cluster]=nodes #define o último cluster receba todos nós que foram alocados para ele
+        dict_clusters=self.salesman2(dict_clusters)  #chama a função do caixeiro viajante que recebe um grafo como parâmetro
+                                                    #retorna o grafo completo
+                                                    #realiza o caxeiro viajante de cada cluster
 
-        dict_clusters=self.sorted_byTime(dict_clusters) #chama a função de ordenação por tempo que recebe um grafo como parâmetro
-                                                        #retorna o grafo ordenado
-                                                        #ordena os nós de cada cluster em relação ao tempo de fechamento de cada nó
+        return dict_clusters #retorna o grafo completo
 
-        dict_clusters=self.salesman(dict_clusters)  #chama a função do caixeiro viajante que recebe um grafo como parâmetro
+    def sweep2(self):
+        current_Cluster=1 #identificação dos clusters
+        current_Capacity=self.capacity #capacidade atual para controle da capacidade de cada veículo
+
+        x_Dep = self.node_List[0].get_Pos()[0] #posição x do depósito
+        y_Dep = self.node_List[0].get_Pos()[1] #posição y do depósito
+        polar_Angles=[] # lista dos ângulos
+        nodes=[] #lista dos nós
+        dict_clusters={} #dicionário dos clusters, realiza a paridade chave/valor entre os clusters e os nós daquele cluster
+                         #exemplo: {1: [5,7,1,6],2: [4,2,8,3] } , cluster 1 possui os nós 5,7,1,6 ; cluster 2 possui os nós 4,2,8,3
+
+        #percorre a lista de nós e realiza o cálculo dos ângulos polares de cada nó para que possa ser feita a clusterização do menor para o maior ângulo
+        for i in range(len(self.node_List)-1):
+            i=i+1 #a iteração começa a partir de 1 vai até n-1, onde n é o tamanho da lista de nós, porque na posição 0 está o depósito
+            x_Node=self.node_List[i].get_Pos()[0] - x_Dep #define a posição x do nó para o cálculo do ângulo polar
+            y_Node=self.node_List[i].get_Pos()[1] - y_Dep #define a posição y do nó para o cálculo do ângulo polar
+            p=(x_Node)/(np.sqrt((x_Node)**2 + (y_Node)**2)) #fórmula de cálculo do ângulo polar 1
+            polar_Angle=np.arccos(p)*180/np.pi #fórmula de cálculo do ângulo polar 2
+
+            # caso a posição y do nó seja negativa, multiplica seu ângulo polar por -1
+            if y_Node<0:
+                polar_Angle*=-1
+
+            polar_Angles.append([polar_Angle,i]) #insere uma lista de par, onde o primeiro elemento é o ângulo e o segundo o nó que possui aquele ângulo
+                                                 #exemplo: [[ângulo7,nó3],[ângulo3,nó8]]
+
+        polar_Angles=sorted(polar_Angles) #ordena os nós baseado de forma decrescente baseado no ângulo
+                                          #exemplo: [[ângulo3,nó8], [ângulo7,nó3]]
+
+        #percorre a lista de ângulos e realiza a distruibiação dos nós para os clusters
+        visits=[]
+        for c in range(1,self.num_Vehicles):
+            for i in range(len(polar_Angles)):
+                node=polar_Angles[i][1] #variável que cada nó
+
+                #caso a capacidade atual seja maior que que a demanda do nó observado, a capacidade daquele veículo é diminuida pelo valor da demanda
+                if current_Capacity>=self.node_List[node].get_Demand() and node not in visits:
+                    current_Capacity-=self.node_List[node].get_Demand()
+                    visits.append(node)
+                    nodes.append(node)
+
+            dict_clusters[current_Cluster] = nodes #define que o cluster atual recebe todos nós que foram alocados para ele
+            nodes=[] #reseta a lista de nós
+            current_Capacity=self.capacity #reseta a capacidade atual
+            current_Cluster+=1 #atualiza o cluster atual
+
+        dict_clusters=self.salesman2(dict_clusters)  #chama a função do caixeiro viajante que recebe um grafo como parâmetro
                                                     #retorna o grafo completo
                                                     #realiza o caxeiro viajante de cada cluster
 
@@ -281,7 +286,6 @@ class Graph(object):
         clusters=[]
         pair_List=[]
         gain_List=[]
-        by_Time = []
         leftovers=[]
         dict_clusters={}
 
@@ -334,8 +338,6 @@ class Graph(object):
             clusters.append(node)
 
         dict_clusters[current_Cluster] = clusters
-
-        dict_clusters=self.sorted_byTime(dict_clusters)
         dict_clusters=self.salesman2(dict_clusters)
 
         return dict_clusters
@@ -347,7 +349,6 @@ class Graph(object):
         total_Vehicles = self.num_Vehicles
         visits = []
         seeds=[]
-        clusters=[]
         capacity=[]
         dict_clusters = {}
         distances = []
@@ -361,8 +362,8 @@ class Graph(object):
             capacity.append(current_Capacity)
             for i in range(1,len(self.node_List)):
                 d=self.distance(self.node_List[i],self.node_List[seed])
-                d1 = self.distance(self.node_List[0], self.node_List[i])
-                d2 = self.distance(self.node_List[0], self.node_List[seed])
+                d1 = self.distance(self.node_List[0], self.node_List[seed])
+                d2 = self.distance(self.node_List[0], self.node_List[i])
                 d3 = self.distance(self.node_List[i], self.node_List[seed])
                 d = d1 + d3 - d2
                 distances.append([d,[i,seed]])
@@ -378,7 +379,6 @@ class Graph(object):
             if node not in visits:
                 if capacity[ind] >= self.node_List[node].get_Demand():
                     capacity[ind] -= self.node_List[node].get_Demand()
-                    clusters.append([ind,node])
                     visits.append(node)
 
         for i in range(len(visits)):
@@ -396,7 +396,6 @@ class Graph(object):
             route.append(node)
 
         dict_clusters[current_Cluster] = route
-        dict_clusters = self.sorted_byTime(dict_clusters)
         dict_clusters = self.salesman2(dict_clusters)
 
         return dict_clusters
@@ -430,12 +429,11 @@ class Graph(object):
 
 class Node(object):
 
-    def __init__(self,node,name,demand,end_Time):
+    def __init__(self,node,name,demand):
         self.x=node[0]
         self.y=node[1]
         self.name=name
         self.demand=demand
-        self.end_Time=end_Time
 
     def get_Pos(self):
         return self.x,self.y
@@ -446,15 +444,12 @@ class Node(object):
     def get_Demand(self):
         return self.demand
 
-    def get_end_Time(self):
-        return self.end_Time
-
 def createNodeList(pos_List,demand_List):
     node_List = []
     j = 0
 
     for i in range(len(pos_List)):
-        node = Node(pos_List[i], j,demand_List[i],end_Time[i])
+        node = Node(pos_List[i], j,demand_List[i])
         node_List.append(node)
         j = j + 1
 
@@ -473,43 +468,59 @@ def output(g,total_Distance,fileName):
 def read_File(arq):
     pos_List=[]
     demand_List=[]
-    end_Time=[]
-    x=[]
-    y=[]
+    X = []
+    Y = []
+    demanda = []
+    estado=0
 
-    with open(arq,"r") as file:
-        File = csv.DictReader(file,delimiter=";")
-
+    with open(arq, "r") as file:
+        File = csv.reader(file)
         for row in File:
-            x.append(int(row["X"]))
-            y.append(int(row["Y"]))
-            demand_List.append(int(row["DEMAND"]))
-            end_Time.append(int(row["DUEDATE"]))
+            for elem in row:
+                split1 = elem.split('	')
+                if split1[0] == 'DIMENSION : ':
+                    dimension = int(split1[1])
 
-        for i in range(len(x)):
-            pos_List.append([x[i],y[i]])
+                elif split1[0] == 'CAPACITY : ':
+                    capacity = int(split1[1])
 
-        return pos_List,demand_List,end_Time
+                elif split1[0] == 'NODE_COORD_SECTION':
+                    estado = 1
+
+                elif split1[0] == 'DEMAND_SECTION':
+                    estado = 2
+
+                elif split1[0] == 'DEPOT_SECTION':
+                    estado = 3
+
+                elif len(split1) == 3 and estado == 1 and split1 != '':
+                    X.append(int(split1[1]))
+                    Y.append(int(split1[2]))
+
+                elif len(split1) >= 2 and estado == 2:
+                    demand_List.append(int(split1[1]))
+
+    for i in range(len(X)):
+        pos_List.append([X[i], Y[i]])
+
+    return pos_List, demand_List, capacity
 
 if __name__ == '__main__':
     start=time.time()
-    path= "C:/Users/thiag/Desktop/tcc/instances/Vrp-Set-Solomon/"
-    files=glob.glob(path+"*.txt")
+    path= "C:/Users/thiag/Desktop/tcc/instances/Vrp-Set-X/"
+    files=glob.glob(path+"*.vrp")
     fileNames=[]
     i=0
-    state=5
+    state=4
 
     if state==1:
         for file in files:
-            split1=file.split(".")
-            split2=split1[0].split("\\")
-            split3=split2[1].split("V")
-            split4=split3[0].split("C")
-            split5=split3[1].split("I")
-            capacity=int(split4[1])
-            vehicles=int(split5[0])
+            split1 = file.split('.')
+            split2 = split1[0].split('\\')
+            split3 = split2[1].split('k')
+            vehicles = int(split3[1])
             fileNames.append(split2[1])
-            pos_List, demand_List, end_Time = read_File(file)
+            pos_List, demand_List,capacity = read_File(file)
             node_List = createNodeList(pos_List, demand_List)
             graph = Graph(node_List, vehicles, capacity)
             g = graph.sweep()
@@ -536,7 +547,7 @@ if __name__ == '__main__':
             capacity=int(split4[1])
             vehicles=int(split5[0])
             fileNames.append(split2[1])
-            pos_List, demand_List, end_Time = read_File(file)
+            pos_List, demand_List = read_File(file)
             node_List = createNodeList(pos_List, demand_List)
             graph = Graph(node_List, vehicles, capacity)
             g = graph.saving()
@@ -564,7 +575,7 @@ if __name__ == '__main__':
             capacity=int(split4[1])
             vehicles=int(split5[0])
             fileNames.append(split2[1])
-            pos_List, demand_List, end_Time = read_File(file)
+            pos_List, demand_List = read_File(file)
             node_List = createNodeList(pos_List, demand_List)
             graph = Graph(node_List, vehicles, capacity)
             l=[]
@@ -589,154 +600,155 @@ if __name__ == '__main__':
             i+=1
 
     elif state==4:
-        columns=("Sweep",'Sweep-Two Opt',"Saving",'Saving-Two Opt',"Fisher-Jakumar",'Fisher-Jakumar-Two Opt')
-        rows_1000 = []
-        rows_700 = []
-        rows_200 = []
-        distances_Sweep_200 = []
-        distances_Saving_200 = []
-        distances_fisher_jakumar_200 = []
-        distances_Sweep_opt_200 = []
-        distances_Saving_opt_200 = []
-        distances_fisher_jakumar_opt_200 = []
-        distances_Sweep_700 = []
-        distances_Saving_700 = []
-        distances_fisher_jakumar_700 = []
-        distances_Sweep_opt_700 = []
-        distances_Saving_opt_700 = []
-        distances_fisher_jakumar_opt_700 = []
-        distances_Sweep_1000 = []
-        distances_Saving_1000 = []
-        distances_fisher_jakumar_1000 = []
-        distances_Sweep_opt_1000 = []
-        distances_Saving_opt_1000 = []
-        distances_fisher_jakumar_opt_1000 = []
+        columns=("Sweep",'Sweep-2OPT',"Saving",'Saving-2OPT',"Fisher-Jaikumar",'Fisher-Jaikumar-2OPT')
+        part1_sweep=[]
+        part1_saving=[]
+        part1_fisher=[]
+        part1_sweepo = []
+        part1_savingo = []
+        part1_fishero = []
+        part2_sweep = []
+        part2_saving = []
+        part2_fisher = []
+        part2_sweepo = []
+        part2_savingo = []
+        part2_fishero = []
+        part3_sweep = []
+        part3_saving = []
+        part3_fisher = []
+        part3_sweepo = []
+        part3_savingo = []
+        part3_fishero = []
+        path1 = "C:/Users/thiag/Desktop/tcc/instances/csv1/"
+        files1 = glob.glob(path1 + "*.vrp")
+        path2 = "C:/Users/thiag/Desktop/tcc/instances/csv2/"
+        files2 = glob.glob(path2 + "*.vrp")
+        path3 = "C:/Users/thiag/Desktop/tcc/instances/csv3/"
+        files3 = glob.glob(path3 + "*.vrp")
+        '''
+        i=1
+        for file in files1:
+            print(i, '/', len(files1))
+            split1 = file.split('.')
+            split2 = split1[0].split('\\')
+            split3 = split2[1].split('k')
+            vehicles = int(split3[1])
+            pos_List, demand_List, capacity = read_File(file)
+            node_List = createNodeList(pos_List, demand_List)
+            graph = Graph(node_List, vehicles, capacity)
+            g = graph.sweep2()
+            g2 = graph.saving()
+            l = []
+            for j in range(50):
+                g3 = graph.fisher_jaikumar()
+                distance = graph.route_Distance(g3)
+                l.append([distance, g3])
+            best_distance = min(l)
+            new_g3 = best_distance[1]
+            total_Distance = graph.route_Distance(g)
+            total_Distance2 = graph.route_Distance(g2)
+            total_Distance3 = graph.route_Distance(new_g3)
+            part1_sweep.append(round(total_Distance))
+            part1_saving.append(round(total_Distance2))
+            part1_fisher.append(round(total_Distance3))
+            g4 = graph.two_opt(g)
+            g5 = graph.two_opt(g2)
+            g6 = graph.two_opt(new_g3)
+            total_Distance4 = graph.route_Distance(g4)
+            total_Distance5 = graph.route_Distance(g5)
+            total_Distance6 = graph.route_Distance(g6)
+            part1_sweepo.append(round(total_Distance4))
+            part1_savingo.append(round(total_Distance5))
+            part1_fishero.append(round(total_Distance6))
 
-        for file in files:
-            print(i+1,'/',len(files))
-            split1=file.split(".")
-            split2=split1[0].split("\\")
-            split3=split2[1].split("V")
-            split4=split3[0].split("C")
-            split5=split3[1].split("I")
+            i=i+1
 
-            if split4[1]=='1000':
-                rows_1000.append(split2[1])
-                capacity = int(split4[1])
-                vehicles = int(split5[0])
-                pos_List, demand_List, end_Time = read_File(file)
-                node_List = createNodeList(pos_List, demand_List)
-                graph = Graph(node_List, vehicles, capacity)
-                g = graph.sweep()
-                g2 = graph.saving()
-                l=[]
-                for j in range(50):
-                    g3 = graph.fisher_jaikumar()
-                    distance = graph.route_Distance(g3)
-                    l.append([distance, g3])
-                best_distance = min(l)
-                new_g3 = best_distance[1]
-                total_Distance = graph.route_Distance(g)
-                total_Distance2 = graph.route_Distance(g2)
-                total_Distance3 = graph.route_Distance(new_g3)
-                distances_Sweep_1000.append(round(total_Distance))
-                distances_Saving_1000.append(round(total_Distance2))
-                distances_fisher_jakumar_1000.append(round(total_Distance3))
-                g4 = graph.two_opt(g)
-                g5 = graph.two_opt(g2)
-                g6= graph.two_opt(new_g3)
-                total_Distance4 = graph.route_Distance(g4)
-                total_Distance5 = graph.route_Distance(g5)
-                total_Distance6 = graph.route_Distance(g6)
-                distances_Sweep_opt_1000.append(round(total_Distance4))
-                distances_Saving_opt_1000.append(round(total_Distance5))
-                distances_fisher_jakumar_opt_1000.append(round(total_Distance6))
+        df1 = pd.DataFrame(zip(part1_sweep, part1_sweepo, part1_saving, part1_savingo, part1_fisher, part1_fishero))
+        df1final = pd.DataFrame(df1.values, columns=columns)
+        df1final.to_csv('C:/Users/thiag/Desktop/tcc/results/resultado1.csv')
+        '''
 
+        i=1
+        for file in files2:
+            print(i, '/', len(files2))
+            split1 = file.split('.')
+            split2 = split1[0].split('\\')
+            split3 = split2[1].split('k')
+            vehicles = int(split3[1])
+            pos_List, demand_List, capacity = read_File(file)
+            node_List = createNodeList(pos_List, demand_List)
+            graph = Graph(node_List, vehicles, capacity)
+            g = graph.sweep2()
+            g2 = graph.saving()
+            l = []
+            for j in range(50):
+                g3 = graph.fisher_jaikumar()
+                distance = graph.route_Distance(g3)
+                l.append([distance, g3])
+            best_distance = min(l)
+            new_g3 = best_distance[1]
+            total_Distance = graph.route_Distance(g)
+            total_Distance2 = graph.route_Distance(g2)
+            total_Distance3 = graph.route_Distance(new_g3)
+            part2_sweep.append(round(total_Distance))
+            part2_saving.append(round(total_Distance2))
+            part2_fisher.append(round(total_Distance3))
+            g4 = graph.two_opt(g)
+            g5 = graph.two_opt(g2)
+            g6 = graph.two_opt(new_g3)
+            total_Distance4 = graph.route_Distance(g4)
+            total_Distance5 = graph.route_Distance(g5)
+            total_Distance6 = graph.route_Distance(g6)
+            part2_sweepo.append(round(total_Distance4))
+            part2_savingo.append(round(total_Distance5))
+            part2_fishero.append(round(total_Distance6))
+            i=i+1
 
+        df2 = pd.DataFrame(zip(part2_sweep, part2_sweepo, part2_saving, part2_savingo, part2_fisher, part2_fishero))
+        df2final = pd.DataFrame(df2.values, columns=columns)
+        df2final.to_csv('C:/Users/thiag/Desktop/tcc/results/resultado2.csv')
+        '''
 
-            elif split4[1] == '700':
-                rows_700.append(split2[1])
-                capacity = int(split4[1])
-                vehicles = int(split5[0])
-                pos_List, demand_List, end_Time = read_File(file)
-                node_List = createNodeList(pos_List, demand_List)
-                graph = Graph(node_List, vehicles, capacity)
-                g = graph.sweep()
-                g2 = graph.saving()
-                l=[]
-                for j in range(50):
-                    g3 = graph.fisher_jaikumar()
-                    distance = graph.route_Distance(g3)
-                    l.append([distance, g3])
-                best_distance = min(l)
-                new_g3 = best_distance[1]
-                total_Distance = graph.route_Distance(g)
-                total_Distance2 = graph.route_Distance(g2)
-                total_Distance3 = graph.route_Distance(new_g3)
-                distances_Sweep_700.append(round(total_Distance))
-                distances_Saving_700.append(round(total_Distance2))
-                distances_fisher_jakumar_700.append(round(total_Distance3))
-                g4 = graph.two_opt(g)
-                g5 = graph.two_opt(g2)
-                g6 = graph.two_opt(new_g3)
-                total_Distance4 = graph.route_Distance(g4)
-                total_Distance5 = graph.route_Distance(g5)
-                total_Distance6 = graph.route_Distance(g6)
-                distances_Sweep_opt_700.append(round(total_Distance4))
-                distances_Saving_opt_700.append(round(total_Distance5))
-                distances_fisher_jakumar_opt_700.append(round(total_Distance6))
+        i=1
+        for file in files3:
+            print(i, '/', len(files3))
+            split1 = file.split('.')
+            split2 = split1[0].split('\\')
+            split3 = split2[1].split('k')
+            vehicles = int(split3[1])
+            pos_List, demand_List, capacity = read_File(file)
+            node_List = createNodeList(pos_List, demand_List)
+            graph = Graph(node_List, vehicles, capacity)
+            g = graph.sweep2()
+            g2 = graph.saving()
+            l = []
+            for j in range(50):
+                g3 = graph.fisher_jaikumar()
+                distance = graph.route_Distance(g3)
+                l.append([distance, g3])
+            best_distance = min(l)
+            new_g3 = best_distance[1]
+            total_Distance = graph.route_Distance(g)
+            total_Distance2 = graph.route_Distance(g2)
+            total_Distance3 = graph.route_Distance(new_g3)
+            part3_sweep.append(round(total_Distance))
+            part3_saving.append(round(total_Distance2))
+            part3_fisher.append(round(total_Distance3))
+            g4 = graph.two_opt(g)
+            g5 = graph.two_opt(g2)
+            g6 = graph.two_opt(new_g3)
+            total_Distance4 = graph.route_Distance(g4)
+            total_Distance5 = graph.route_Distance(g5)
+            total_Distance6 = graph.route_Distance(g6)
+            part3_sweepo.append(round(total_Distance4))
+            part3_savingo.append(round(total_Distance5))
+            part3_fishero.append(round(total_Distance6))
+            i=i+1
 
-
-            elif split4[1] == '200':
-                rows_200.append(split2[1])
-                capacity = int(split4[1])
-                vehicles = int(split5[0])
-                pos_List, demand_List, end_Time = read_File(file)
-                node_List = createNodeList(pos_List, demand_List)
-                graph = Graph(node_List, vehicles, capacity)
-                g = graph.sweep()
-                g2 = graph.saving()
-                l=[]
-                for j in range(50):
-                    g3 = graph.fisher_jaikumar()
-                    distance = graph.route_Distance(g3)
-                    l.append([distance, g3])
-                best_distance = min(l)
-                new_g3 = best_distance[1]
-                total_Distance = graph.route_Distance(g)
-                total_Distance2 = graph.route_Distance(g2)
-                total_Distance3 = graph.route_Distance(new_g3)
-                distances_Sweep_200.append(round(total_Distance))
-                distances_Saving_200.append(round(total_Distance2))
-                distances_fisher_jakumar_200.append(round(total_Distance3))
-                g4 = graph.two_opt(g)
-                g5 = graph.two_opt(g2)
-                g6 = graph.two_opt(new_g3)
-                total_Distance4 = graph.route_Distance(g4)
-                total_Distance5 = graph.route_Distance(g5)
-                total_Distance6 = graph.route_Distance(g6)
-                distances_Sweep_opt_200.append(round(total_Distance4))
-                distances_Saving_opt_200.append(round(total_Distance5))
-                distances_fisher_jakumar_opt_200.append(round(total_Distance6))
-
-            i+=1
-
-        df1 = pd.DataFrame(zip(distances_Sweep_1000,distances_Sweep_opt_1000, distances_Saving_1000,distances_Saving_opt_1000,distances_fisher_jakumar_1000,distances_fisher_jakumar_opt_1000))
-        df2 = pd.DataFrame(zip(distances_Sweep_700,distances_Sweep_opt_700, distances_Saving_700,distances_Saving_opt_700,distances_fisher_jakumar_700,distances_fisher_jakumar_opt_700))
-        df3 = pd.DataFrame(zip(distances_Sweep_200,distances_Sweep_opt_200, distances_Saving_200,distances_Saving_opt_200,distances_fisher_jakumar_200,distances_fisher_jakumar_opt_200))
-        dfs=[df1,df2,df3]
-        row_L=[rows_1000,rows_700,rows_200]
-
-        for i in range(3):
-            fig, ax = plt.subplots()
-            fig.patch.set_visible(False)
-            ax.axis('off')
-            table=ax.table(cellText=dfs[i].values, rowLabels=row_L[i], colLabels=columns, loc='center')
-            table.auto_set_font_size(False)
-            table.set_fontsize(18)
-            table.scale(2, 2)
-            #fig.tight_layout()
-            plt.show()
+        df3 = pd.DataFrame(zip(part3_sweep,part3_sweepo, part3_saving,part3_savingo,part3_fisher,part3_fishero))
+        df3final = pd.DataFrame(df3.values, columns=columns)
+        df3final.to_csv('C:/Users/thiag/Desktop/tcc/results/resultado3.csv')
+        '''
 
     elif state==5:
         Sweep_optimization = []
@@ -758,7 +770,7 @@ if __name__ == '__main__':
             split5=split3[1].split("I")
             capacity=int(split4[1])
             vehicles=int(split5[0])
-            pos_List, demand_List, end_Time = read_File(file)
+            pos_List, demand_List = read_File(file)
             node_List = createNodeList(pos_List, demand_List)
             graph = Graph(node_List, vehicles, capacity)
             g = graph.sweep()
@@ -794,41 +806,145 @@ if __name__ == '__main__':
             Sweep_optimization.append(round(percent1,1))
             Saving_optimization.append(round(percent2,1))
             Fisher_jaikumar_optimization.append(round(percent3,1))
-            i+=1
 
         print(sorted(Sweep_optimization))
         print(sorted(Saving_optimization))
         print(sorted(Fisher_jaikumar_optimization))
 
     else:
-        file='C:/Users/thiag/Desktop/tcc/instances/Vrp-Set-Solomon\\C200V25I2.txt'
-        split1 = file.split(".")
-        split2 = split1[0].split("\\")
-        split3 = split2[1].split("V")
-        split4 = split3[0].split("C")
-        split5 = split3[1].split("I")
-        capacity = int(split4[1])
-        vehicles = int(split5[0])
-        fileNames.append(split2[1])
-        pos_List, demand_List, end_Time = read_File(file)
-        node_List = createNodeList(pos_List, demand_List)
-        graph = Graph(node_List, vehicles, capacity)
-        g = graph.sweep()
-        fileName = "C:/Users/thiag/Desktop/tcc/results/" + fileNames[i] + ".sweep"
-        fileName2 = "C:/Users/thiag/Desktop/tcc/results/" + "Sweep - " + fileNames[i] + ".png"
-        total_Distance = graph.route_Distance(g)
-        print('sweep:',total_Distance)
-        output(g, total_Distance, fileName)
-        graph.imgOutput(g, fileName2)
-        fileName3 = "C:/Users/thiag/Desktop/tcc/results/" + fileNames[i] + "B" + ".sweep"
-        fileName4 = "C:/Users/thiag/Desktop/tcc/results/" + "Sweep - " + fileNames[i] + "B" + ".png"
-        g2 = graph.two_opt(g)
-        total_Distance2 = graph.route_Distance(g2)
-        print('sweep_opt:',total_Distance2)
-        output(g2, total_Distance2, fileName3)
-        graph.imgOutput(g2, fileName4)
+        columns = ("Sweep", 'Sweep-2OPT', "Saving", 'Saving-2OPT', "Fisher-Jaikumar", 'Fisher-Jaikumar-2OPT')
+        part1_sweep = []
+        part1_saving = []
+        part1_fisher = []
+        part1_sweepo = []
+        part1_savingo = []
+        part1_fishero = []
+        part2_sweep = []
+        part2_saving = []
+        part2_fisher = []
+        part2_sweepo = []
+        part2_savingo = []
+        part2_fishero = []
+        part3_sweep = []
+        part3_saving = []
+        part3_fisher = []
+        part3_sweepo = []
+        part3_savingo = []
+        part3_fishero = []
 
-        i += 1
+        for i in range(0,34):
+            print(i + 1, '/', len(files))
+            split1 = files[i].split('.')
+            split2 = split1[0].split('\\')
+            split3 = split2[1].split('k')
+            vehicles = split3[1]
+            pos_List, demand_List, capacity = read_File(files[i])
+            node_List = createNodeList(pos_List, demand_List)
+            graph = Graph(node_List, vehicles, capacity)
+            g = graph.sweep2()
+            g2 = graph.saving()
+            l = []
+            for j in range(50):
+                g3 = graph.fisher_jaikumar()
+                distance = graph.route_Distance(g3)
+                l.append([distance, g3])
+            best_distance = min(l)
+            new_g3 = best_distance[1]
+            total_Distance = graph.route_Distance(g)
+            total_Distance2 = graph.route_Distance(g2)
+            total_Distance3 = graph.route_Distance(new_g3)
+            part1_sweep.append(round(total_Distance))
+            part1_saving.append(round(total_Distance2))
+            part1_fisher.append(round(total_Distance3))
+            g4 = graph.two_opt(g)
+            g5 = graph.two_opt(g2)
+            g6 = graph.two_opt(new_g3)
+            total_Distance4 = graph.route_Distance(g4)
+            total_Distance5 = graph.route_Distance(g5)
+            total_Distance6 = graph.route_Distance(g6)
+            part1_sweepo.append(round(total_Distance4))
+            part1_savingo.append(round(total_Distance5))
+            part1_fishero.append(round(total_Distance6))
+
+        for i in range(34,66):
+            print(i + 1, '/', len(files))
+            split1 = files[i].split('.')
+            split2 = split1[0].split('\\')
+            split3 = split2[1].split('k')
+            vehicles = split3[1]
+            pos_List, demand_List, capacity = read_File(files[i])
+            node_List = createNodeList(pos_List, demand_List)
+            graph = Graph(node_List, vehicles, capacity)
+            g = graph.sweep2()
+            g2 = graph.saving()
+            l = []
+            for j in range(50):
+                g3 = graph.fisher_jaikumar()
+                distance = graph.route_Distance(g3)
+                l.append([distance, g3])
+            best_distance = min(l)
+            new_g3 = best_distance[1]
+            total_Distance = graph.route_Distance(g)
+            total_Distance2 = graph.route_Distance(g2)
+            total_Distance3 = graph.route_Distance(new_g3)
+            part2_sweep.append(round(total_Distance))
+            part2_saving.append(round(total_Distance2))
+            part2_fisher.append(round(total_Distance3))
+            g4 = graph.two_opt(g)
+            g5 = graph.two_opt(g2)
+            g6 = graph.two_opt(new_g3)
+            total_Distance4 = graph.route_Distance(g4)
+            total_Distance5 = graph.route_Distance(g5)
+            total_Distance6 = graph.route_Distance(g6)
+            part2_sweepo.append(round(total_Distance4))
+            part2_savingo.append(round(total_Distance5))
+            part2_fishero.append(round(total_Distance6))
+
+        for i in range(66,100):
+            print(i + 1, '/', len(files))
+            split1 = files[i].split('.')
+            split2 = split1[0].split('\\')
+            split3 = split2[1].split('k')
+            vehicles = split3[1]
+            pos_List, demand_List, capacity = read_File(files[i])
+            node_List = createNodeList(pos_List, demand_List)
+            graph = Graph(node_List, vehicles, capacity)
+            g = graph.sweep2()
+            g2 = graph.saving()
+            l = []
+            for j in range(50):
+                g3 = graph.fisher_jaikumar()
+                distance = graph.route_Distance(g3)
+                l.append([distance, g3])
+            best_distance = min(l)
+            new_g3 = best_distance[1]
+            total_Distance = graph.route_Distance(g)
+            total_Distance2 = graph.route_Distance(g2)
+            total_Distance3 = graph.route_Distance(new_g3)
+            part3_sweep.append(round(total_Distance))
+            part3_saving.append(round(total_Distance2))
+            part3_fisher.append(round(total_Distance3))
+            g4 = graph.two_opt(g)
+            g5 = graph.two_opt(g2)
+            g6 = graph.two_opt(new_g3)
+            total_Distance4 = graph.route_Distance(g4)
+            total_Distance5 = graph.route_Distance(g5)
+            total_Distance6 = graph.route_Distance(g6)
+            part3_sweepo.append(round(total_Distance4))
+            part3_savingo.append(round(total_Distance5))
+            part3_fishero.append(round(total_Distance6))
+
+        df1 = pd.DataFrame(zip(part1_sweep, part1_sweepo, part1_saving, part1_savingo, part1_fisher, part1_fishero))
+        df1final = pd.DataFrame(df1.values, columns=columns)
+        df1final.to_csv('C:/Users/thiag/Desktop/tcc/results/resultado1.csv')
+
+        df2 = pd.DataFrame(zip(part2_sweep, part2_sweepo, part2_saving, part2_savingo, part2_fisher, part2_fishero))
+        df2final = pd.DataFrame(df2.values, columns=columns)
+        df2final.to_csv('C:/Users/thiag/Desktop/tcc/results/resultado2.csv')
+
+        df3 = pd.DataFrame(zip(part3_sweep, part3_sweepo, part3_saving, part3_savingo, part3_fisher, part3_fishero))
+        df3final = pd.DataFrame(df3.values, columns=columns)
+        df3final.to_csv('C:/Users/thiag/Desktop/tcc/results/resultado3.csv')
 
     end=time.time()
     execution_Time=end-start
